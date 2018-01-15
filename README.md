@@ -1,6 +1,6 @@
 # Design Patterns In Kotlin
 
-#### :warning: Check my newest project: [Introduction to Unit Testing with Kotlin](https://github.com/dbacinski/Android-Testing-With-Kotlin/blob/master/docs/Unit-Testing-Introduction.md)
+#### :warning: New article about testing: [Unit Testing with Mockito 2](https://github.com/dbacinski/Android-Testing-With-Kotlin/blob/master/docs/Unit-Testing-Mockito.md)
 
 Project maintained by [@dbacinski](http://twitter.com/dbacinski) (Dariusz Baciński)
 
@@ -609,7 +609,7 @@ class OrangeFactory : PlantFactory() {
 #### Usage
 
 ```kotlin
-val plantFactory = PlantFactory.createFactory(OrangePlant::class)
+val plantFactory = PlantFactory.createFactory<OrangePlant>()
 val plant = plantFactory.makePlant()
 println("Created plant: $plant")
 ```
