@@ -204,21 +204,13 @@ class AuthorizationPresenter {
 
     private var state: AuthorizationState = Unauthorized
 
-    fun loginUser(userLogin: String) {
-        state = Authorized(userLogin)
-    }
-
-    fun logoutUser() {
-        state = Unauthorized
-    }
-
     val isAuthorized: Boolean
         get() = when (state) {
             is Authorized -> true
             is Unauthorized -> false
         }
 
-    val userLogin: String
+    val userName: String
         get() {
             val state = this.state //val enables smart casting of state
             return when (state) {
@@ -227,7 +219,15 @@ class AuthorizationPresenter {
             }
         }
 
-    override fun toString() = "User '$userLogin' is logged in: $isAuthorized"
+    fun loginUser(userName: String) {
+        state = Authorized(userName)
+    }
+
+    fun logoutUser() {
+        state = Unauthorized
+    }
+
+    override fun toString() = "User '$userName' is logged in: $isAuthorized"
 }
 ```
 
@@ -336,53 +336,50 @@ The visitor pattern is used to separate a relatively complex set of structured d
 
 ```kotlin
 interface ReportVisitable {
-    fun accept(visitor: ReportVisitor)
+    fun <R> accept(visitor: ReportVisitor<R>): R
 }
 
 class FixedPriceContract(val costPerYear: Long) : ReportVisitable {
-    override fun accept(visitor: ReportVisitor) = visitor.visit(this)
+    override fun <R> accept(visitor: ReportVisitor<R>): R = visitor.visit(this)
 }
 
 class TimeAndMaterialsContract(val costPerHour: Long, val hours: Long) : ReportVisitable {
-    override fun accept(visitor: ReportVisitor) = visitor.visit(this)
+    override fun <R> accept(visitor: ReportVisitor<R>): R = visitor.visit(this)
 }
 
 class SupportContract(val costPerMonth: Long) : ReportVisitable {
-    override fun accept(visitor: ReportVisitor) = visitor.visit(this)
+    override fun <R> accept(visitor: ReportVisitor<R>): R = visitor.visit(this)
 }
 
-interface ReportVisitor {
-    fun visit(contract: FixedPriceContract)
-    fun visit(contract: TimeAndMaterialsContract)
-    fun visit(contract: SupportContract)
+interface ReportVisitor<out R> {
+
+    fun visit(contract: FixedPriceContract): R
+    fun visit(contract: TimeAndMaterialsContract): R
+    fun visit(contract: SupportContract): R
 }
 
-class MonthlyCostReportVisitor(var monthlyCost: Long = 0) : ReportVisitor {
-    override fun visit(contract: FixedPriceContract) {
-        monthlyCost += contract.costPerYear / 12
-    }
+class MonthlyCostReportVisitor : ReportVisitor<Long> {
 
-    override fun visit(contract: TimeAndMaterialsContract) {
-        monthlyCost += contract.costPerHour * contract.hours
-    }
+    override fun visit(contract: FixedPriceContract): Long =
+        contract.costPerYear / 12
 
-    override fun visit(contract: SupportContract) {
-        monthlyCost += contract.costPerMonth
-    }
+    override fun visit(contract: TimeAndMaterialsContract): Long =
+        contract.costPerHour * contract.hours
+
+    override fun visit(contract: SupportContract): Long =
+        contract.costPerMonth
 }
 
-class YearlyReportVisitor(var yearlyCost: Long = 0) : ReportVisitor {
-    override fun visit(contract: FixedPriceContract) {
-        yearlyCost += contract.costPerYear
-    }
+class YearlyReportVisitor : ReportVisitor<Long> {
 
-    override fun visit(contract: TimeAndMaterialsContract) {
-        yearlyCost += contract.costPerHour * contract.hours
-    }
+    override fun visit(contract: FixedPriceContract): Long =
+        contract.costPerYear
 
-    override fun visit(contract: SupportContract) {
-        yearlyCost += contract.costPerMonth * 12
-    }
+    override fun visit(contract: TimeAndMaterialsContract): Long =
+        contract.costPerHour * contract.hours
+
+    override fun visit(contract: SupportContract): Long =
+        contract.costPerMonth * 12
 }
 ```
 
@@ -390,19 +387,22 @@ class YearlyReportVisitor(var yearlyCost: Long = 0) : ReportVisitor {
 
 ```kotlin
 val projectAlpha = FixedPriceContract(costPerYear = 10000)
-val projectBeta = SupportContract(costPerMonth = 500)
 val projectGamma = TimeAndMaterialsContract(hours = 150, costPerHour = 10)
+val projectBeta = SupportContract(costPerMonth = 500)
 val projectKappa = TimeAndMaterialsContract(hours = 50, costPerHour = 50)
 
 val projects = arrayOf(projectAlpha, projectBeta, projectGamma, projectKappa)
 
 val monthlyCostReportVisitor = MonthlyCostReportVisitor()
-projects.forEach { it.accept(monthlyCostReportVisitor) }
-println("Monthly cost: ${monthlyCostReportVisitor.monthlyCost}")
+
+val monthlyCost = projects.map { it.accept(monthlyCostReportVisitor) }.sum()
+println("Monthly cost: $monthlyCost")
+assertThat(monthlyCost).isEqualTo(5333)
 
 val yearlyReportVisitor = YearlyReportVisitor()
-projects.forEach { it.accept(yearlyReportVisitor) }
-println("Yearly cost: ${yearlyReportVisitor.yearlyCost}")
+val yearlyCost = projects.map { it.accept(yearlyReportVisitor) }.sum()
+println("Yearly cost: $yearlyCost")
+assertThat(yearlyCost).isEqualTo(20000)
 ```
 
 #### Output
@@ -665,41 +665,42 @@ The factory pattern is used to replace class constructors, abstracting the proce
 #### Example
 
 ```kotlin
-interface Currency {
+sealed class Country {
+    object USA : Country() //Kotlin 1.0 could only be an inner class or object
+}
+
+object Spain : Country() //Kotlin 1.1 declared as top level class/object in the same file
+class Greece(val someProperty: String) : Country()
+data class Canada(val someProperty: String) : Country() //Kotlin 1.1 data class extends other class
+//object Poland : Country()
+
+class Currency(
     val code: String
-}
+)
 
-class Euro(override val code: String = "EUR") : Currency
-class UnitedStatesDollar(override val code: String = "USD") : Currency
+object CurrencyFactory {
 
-enum class Country {
-    UnitedStates, Spain, UK, Greece
-}
-
-class CurrencyFactory {
-    fun currencyForCountry(country: Country): Currency? {
-        return when (country) {
-            Country.Spain, Country.Greece -> Euro()
-            Country.UnitedStates          -> UnitedStatesDollar()
-            else                          -> null
-                }
-    }
+    fun currencyForCountry(country: Country): Currency =
+        when (country) {
+            is Greece -> Currency("EUR")
+            is Spain -> Currency("EUR")
+            is Country.USA -> Currency("USD")
+            is Canada -> Currency("CAD")
+        }  //try to add a new country Poland, it won't even compile without adding new branch to 'when'
 }
 ```
 
 #### Usage
 
 ```kotlin
-val noCurrencyCode = "No Currency Code Available"
+val greeceCurrency = CurrencyFactory.currencyForCountry(Greece("")).code
+println("Greece currency: $greeceCurrency")
 
-val greeceCode = CurrencyFactory().currencyForCountry(Country.Greece)?.code ?: noCurrencyCode
-println("Greece currency: $greeceCode")
+val usaCurrency = CurrencyFactory.currencyForCountry(Country.USA).code
+println("USA currency: $usaCurrency")
 
-val usCode = CurrencyFactory().currencyForCountry(Country.UnitedStates)?.code ?: noCurrencyCode
-println("US currency: $usCode")
-
-val ukCode = CurrencyFactory().currencyForCountry(Country.UK)?.code ?: noCurrencyCode
-println("UK currency: $ukCode")
+assertThat(greeceCurrency).isEqualTo("EUR")
+assertThat(usaCurrency).isEqualTo("USD")
 ```
 
 #### Output
@@ -1031,7 +1032,7 @@ Reading file: readme.md
 [Composite](/patterns/src/test/kotlin/Composite.kt)
 ------------------
 
-The composite pattern is used to composes zero-or-more similar 
+The composite pattern is used to compose zero-or-more similar 
 objects so that they can be manipulated as one object.
 
 #### Example
